@@ -1,9 +1,12 @@
 package com.example.tradingengine.trade;
 
+import com.example.tradingengine.testsupport.TestInstruments;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -15,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestInstruments.class)
 class TradeControllerTest {
 
     private final MockMvc mockMvc;
@@ -25,6 +29,7 @@ class TradeControllerTest {
     }
 
     @Test
+    @DisplayName("Реестр возвращает сделки выбранного инструмента в порядке исполнения")
     void returnsEarlierTradesForRequestedInstrumentInExecutionOrder() throws Exception {
         postOrder("TRADE-TEST", "SELL", 100, 10);
         postOrder("TRADE-TEST", "BUY", 101, 4);
@@ -45,6 +50,7 @@ class TradeControllerTest {
     }
 
     @Test
+    @DisplayName("Реестр возвращает пустой список сделок для неизвестного инструмента")
     void returnsEmptyListForUnknownInstrument() throws Exception {
         mockMvc.perform(get("/trades").param("seccode", "UNKNOWN-TRADE"))
                 .andExpect(status().isOk())
@@ -52,6 +58,7 @@ class TradeControllerTest {
     }
 
     @Test
+    @DisplayName("Запрос сделок без кода инструмента или с пробелами даёт HTTP 400")
     void rejectsMissingOrBlankInstrumentCode() throws Exception {
         mockMvc.perform(get("/trades"))
                 .andExpect(status().isBadRequest());
@@ -61,8 +68,8 @@ class TradeControllerTest {
 
     private void postOrder(String seccode, String side, int price, long quantity) throws Exception {
         String body = """
-                {"seccode":"%s","side":"%s","price":%d,"quantity":%d}
-                """.formatted(seccode, side, price, quantity);
+                {"accountId":%d,"seccode":"%s","side":"%s","price":%d,"quantity":%d}
+                """.formatted(TestInstruments.accountForSide(side), seccode, side, price, quantity);
         mockMvc.perform(post("/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))

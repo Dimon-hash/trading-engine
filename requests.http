@@ -1,0 +1,135 @@
+@baseUrl = http://localhost:8080
+@seccode = DEMO
+
+### Продать один лот по 100 ₽ за бумагу
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "accountId": 2,
+  "seccode": "{{seccode}}",
+  "side": "SELL",
+  "price": 100,
+  "quantity": 1
+}
+
+> {%
+client.test("Продажа принята в стакан", function () {
+    client.assert(response.status === 201, "Ожидался HTTP 201");
+    client.assert(response.body.trades.length === 0, "Продажа должна остаться открытой");
+});
+%}
+
+### Купить два лота по цене до 101 ₽ за бумагу
+< {%
+client.global.clear("buyOrderId");
+%}
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "accountId": 1,
+  "seccode": "{{seccode}}",
+  "side": "BUY",
+  "price": 101,
+  "quantity": 2
+}
+
+> {%
+if (response.status === 201) {
+    client.global.set("buyOrderId", String(response.body.orderId));
+}
+
+client.test("Один лот куплен по цене заявки продавца", function () {
+    client.assert(response.status === 201, "Ожидался HTTP 201");
+    client.assert(response.body.trades.length === 1, "Ожидалась одна сделка");
+    const trade = response.body.trades[0];
+    client.assert(trade.price === 100, "Цена сделки должна быть 100 ₽ за бумагу");
+    client.assert(trade.quantity === 1, "Должен исполниться один лот");
+});
+%}
+
+### Проверить открытый остаток покупки в стакане
+GET {{baseUrl}}/quotes?seccode={{seccode}}
+
+> {%
+client.test("В стакане остался один лот на покупку по 101 ₽ за бумагу", function () {
+    client.assert(response.status === 200, "Ожидался HTTP 200");
+    const bids = response.body.bids;
+    client.assert(bids.length === 1, "Ожидался один уровень покупки");
+    client.assert(bids[0].price === 101 && bids[0].quantity === 1, "Ожидался один лот по 101 ₽ за бумагу");
+});
+%}
+
+### Посмотреть сделку в реестре
+GET {{baseUrl}}/trades?seccode={{seccode}}
+
+> {%
+client.test("В реестре есть сделка на один лот по 100 ₽ за бумагу", function () {
+    client.assert(response.status === 200, "Ожидался HTTP 200");
+    client.assert(response.body.length === 1, "Ожидалась одна сделка");
+    const trade = response.body[0];
+    client.assert(trade.price === 100 && trade.quantity === 1, "Ожидался один лот по 100 ₽ за бумагу");
+});
+%}
+
+### Отменить оставшийся лот покупки
+POST {{baseUrl}}/orders/{{buyOrderId}}/cancel?seccode={{seccode}}
+
+> {%
+client.test("Заявка отменена и открытый остаток снят", function () {
+    client.assert(response.status === 200, "Ожидался HTTP 200");
+    client.assert(response.body.status === "CANCELLED", "Ожидался статус CANCELLED");
+    client.assert(response.body.remainingQuantity === 0, "Открытый остаток должен быть равен нулю");
+});
+%}
+
+### Проверить счёт покупателя после отмены
+GET {{baseUrl}}/accounts/1
+
+> {%
+client.test("Резерв освобождён, купленные бумаги на счёте", function () {
+    client.assert(response.status === 200, "Ожидался HTTP 200");
+    const account = response.body;
+    client.assert(account.availableBalance === 9000, "Доступный баланс должен быть 9 000 ₽");
+    client.assert(account.reservedBalance === 0, "Денежный резерв должен быть равен нулю");
+    const position = account.positions.find(item => item.seccode === "DEMO");
+    client.assert(position && position.availableQuantity === 10, "На счёте должно быть 10 бумаг DEMO");
+});
+%}
+
+### Ошибка — цена 100,12 ₽ не кратна шагу 0,05 ₽
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "accountId": 1,
+  "seccode": "{{seccode}}",
+  "side": "BUY",
+  "price": 100.12,
+  "quantity": 1
+}
+
+> {%
+client.test("Некорректный шаг цены даёт HTTP 400", function () {
+    client.assert(response.status === 400, "Ожидался HTTP 400");
+});
+%}
+
+### Ошибка — недостаточно денег для покупки 100 лотов
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "accountId": 1,
+  "seccode": "{{seccode}}",
+  "side": "BUY",
+  "price": 100,
+  "quantity": 100
+}
+
+> {%
+client.test("Недостаток денег даёт HTTP 409", function () {
+    client.assert(response.status === 409, "Ожидался HTTP 409");
+});
+%}

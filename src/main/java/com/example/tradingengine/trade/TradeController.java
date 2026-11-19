@@ -1,8 +1,8 @@
 package com.example.tradingengine.trade;
 
+import com.example.tradingengine.instrument.validation.InstrumentValidation.RequiredSeccode;
 import com.example.tradingengine.model.Trade;
-import com.example.tradingengine.order.OrderService;
-import jakarta.validation.constraints.NotBlank;
+import com.example.tradingengine.order.service.OrderService;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -18,7 +18,7 @@ public class TradeController {
     }
 
     @GetMapping("/trades")
-    public List<Trade> findTrades(@RequestParam("seccode") @NotBlank String seccode) {
+    public List<Trade> findTrades(@RequestParam("seccode") @RequiredSeccode String seccode) {
         return orderService.findTrades(seccode);
     }
 }

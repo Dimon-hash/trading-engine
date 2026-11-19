@@ -1,12 +1,13 @@
 package com.example.tradingengine.matching;
 
+import com.example.tradingengine.matching.validation.MatchingValidation;
 import com.example.tradingengine.model.Order;
+import com.example.tradingengine.model.QuoteSnapshot;
 import com.example.tradingengine.model.Side;
 import com.example.tradingengine.model.Trade;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
+
+import java.math.BigDecimal;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class OrderBook {
@@ -18,28 +19,20 @@ public final class OrderBook {
     private final OrderBookSide sells = new OrderBookSide(Comparator.naturalOrder());
 
     public OrderBook(String seccode) {
-        this.seccode = Objects.requireNonNull(seccode, "seccode");
+        this.seccode = MatchingValidation.requireSeccode(seccode);
     }
 
-    /**
-     * Принимает заявку и исполняет её против лучших встречных заявок,
-     * пока их цены укладываются в лимит входящей заявки.
-     * Каждая сделка проходит по цене встречной заявки из книги.
-     * Неисполненный остаток добавляется в книгу по исходной цене.
-     *
-     * @param incoming входящая заявка на покупку или продажу
-     * @return сделки в порядке исполнения. Список пуст, если сделок не было
-     * @throws IllegalArgumentException если заявка относится к другому инструменту
-     */
-    public synchronized List<Trade> submit(Order incoming) {
-        if (!seccode.equals(incoming.seccode())) {
-            throw new IllegalArgumentException("Заявка относится к другому инструменту");
-        }
+    public List<Trade> submit(Order incoming) {
+        return execute(incoming).stream().map(OrderExecution::trade).toList();
+    }
+
+    public synchronized List<OrderExecution> execute(Order incoming) {
+        MatchingValidation.requireMatchingInstrument(seccode, incoming);
 
         boolean isBuy = incoming.side() == Side.BUY;
         OrderBookSide ownSide = isBuy ? buys : sells;
         OrderBookSide oppositeSide = isBuy ? sells : buys;
-        List<Trade> trades = new ArrayList<>();
+        List<OrderExecution> executions = new ArrayList<>();
         long remaining = incoming.quantity();
 
         while (remaining > 0) {
@@ -50,7 +43,10 @@ public final class OrderBook {
 
             long filled = Math.min(remaining, resting.quantity());
             long tradeId = NEXT_TRADE_ID.getAndIncrement();
-            trades.add(new Trade(tradeId, seccode, resting.price(), filled));
+            Trade trade = new Trade(tradeId, seccode, resting.price(), filled);
+            long buyOrderId = isBuy ? incoming.id() : resting.id();
+            long sellOrderId = isBuy ? resting.id() : incoming.id();
+            executions.add(new OrderExecution(trade, buyOrderId, sellOrderId));
 
             oppositeSide.fillBestOrder(filled);
             remaining -= filled;
@@ -60,12 +56,53 @@ public final class OrderBook {
             ownSide.add(incoming.withQuantity(remaining));
         }
 
-        return List.copyOf(trades);
+        return List.copyOf(executions);
+    }
+
+    public Optional<List<Trade>> changePrice(
+            Side side, long id, BigDecimal oldPrice, BigDecimal newPrice
+    ) {
+        return reprice(side, id, oldPrice, newPrice)
+                .map(executions -> executions.stream().map(OrderExecution::trade).toList());
+    }
+
+    public synchronized Optional<List<OrderExecution>> reprice(
+            Side side, long id, BigDecimal oldPrice, BigDecimal newPrice
+    ) {
+        MatchingValidation.requireSide(side);
+        OrderBookSide bookSide = side == Side.BUY ? buys : sells;
+        Order openOrder = bookSide.find(id, oldPrice);
+        if (openOrder == null) {
+            return Optional.empty();
+        }
+        if (openOrder.price().compareTo(newPrice) == 0) {
+            return Optional.of(List.of());
+        }
+
+        Order replacement = openOrder.withPrice(newPrice);
+        bookSide.remove(openOrder);
+        return Optional.of(execute(replacement));
+    }
+
+    public synchronized boolean cancel(Side side, long id, BigDecimal price) {
+        MatchingValidation.requireSide(side);
+        OrderBookSide bookSide = side == Side.BUY ? buys : sells;
+        Order openOrder = bookSide.find(id, price);
+        if (openOrder == null) {
+            return false;
+        }
+
+        bookSide.remove(openOrder);
+        return true;
     }
 
     public synchronized List<Order> openOrders(Side side) {
-        Objects.requireNonNull(side, "side");
+        MatchingValidation.requireSide(side);
         return (side == Side.BUY ? buys : sells).snapshot();
+    }
+
+    public synchronized QuoteSnapshot quotes() {
+        return new QuoteSnapshot(seccode, buys.priceLevels(), sells.priceLevels());
     }
 
     private static boolean pricesCross(Order incoming, Order resting) {

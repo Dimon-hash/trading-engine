@@ -1,8 +1,11 @@
 package com.example.tradingengine.matching;
 
 import com.example.tradingengine.model.Order;
+import com.example.tradingengine.model.QuoteSnapshot.PriceLevel;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
@@ -27,14 +30,6 @@ final class OrderBookSide {
         return level == null ? null : level.getValue().getFirst();
     }
 
-    /**
-     * Списывает исполненные лоты у первой заявки по лучшей цене.
-     * При частичном исполнении остаток сохраняет место заявки в очереди.
-     * При полном исполнении заявка удаляется. Если очередь опустела,
-     * ценовой уровень тоже удаляется.
-     *
-     * @param filledQuantity количество исполненных лотов
-     */
     void fillBestOrder(long filledQuantity) {
         var queue = ordersByPrice.firstEntry().getValue();
         Order order = queue.removeFirst();
@@ -48,7 +43,40 @@ final class OrderBookSide {
         }
     }
 
+    Order find(long id, BigDecimal price) {
+        Deque<Order> queue = ordersByPrice.get(price);
+        if (queue == null) {
+            return null;
+        }
+
+        for (Order order : queue) {
+            if (order.id() == id) {
+                return order;
+            }
+        }
+        return null;
+    }
+
+    void remove(Order order) {
+        Deque<Order> queue = ordersByPrice.get(order.price());
+        if (queue != null && queue.remove(order) && queue.isEmpty()) {
+            ordersByPrice.remove(order.price());
+        }
+    }
+
     List<Order> snapshot() {
         return ordersByPrice.values().stream().flatMap(Deque::stream).toList();
+    }
+
+    List<PriceLevel> priceLevels() {
+        List<PriceLevel> levels = new ArrayList<>(ordersByPrice.size());
+        for (var entry : ordersByPrice.entrySet()) {
+            BigInteger quantity = BigInteger.ZERO;
+            for (Order order : entry.getValue()) {
+                quantity = quantity.add(BigInteger.valueOf(order.quantity()));
+            }
+            levels.add(new PriceLevel(entry.getKey(), quantity));
+        }
+        return levels;
     }
 }
