@@ -1,6 +1,6 @@
 package com.example.tradingengine.testsupport;
 
-import com.example.tradingengine.account.service.CashLedger;
+import com.example.tradingengine.account.service.AccountStore;
 import com.example.tradingengine.instrument.InstrumentCatalog;
 import com.example.tradingengine.model.Account;
 import com.example.tradingengine.model.Instrument;
@@ -23,7 +23,7 @@ public class TestInstruments {
     }
 
     @Bean
-    ApplicationRunner registerTestInstruments(InstrumentCatalog catalog, CashLedger ledger) {
+    ApplicationRunner registerTestInstruments(InstrumentCatalog catalog, AccountStore ledger) {
         return args -> {
             Currency rub = Currency.getInstance("RUB");
             ledger.register(new Account(BUYER_ID, 111L, new BigDecimal("1000000"), rub));

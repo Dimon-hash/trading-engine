@@ -1,6 +1,6 @@
 package com.example.tradingengine.account;
 
-import com.example.tradingengine.account.service.CashLedger;
+import com.example.tradingengine.account.service.AccountStore;
 import com.example.tradingengine.instrument.InstrumentCatalog;
 import com.example.tradingengine.model.Account;
 import com.example.tradingengine.model.Instrument;
@@ -34,11 +34,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AccountTradingTest {
 
     private final MockMvc mockMvc;
-    private final CashLedger ledger;
+    private final AccountStore ledger;
     private final InstrumentCatalog catalog;
 
     @Autowired
-    AccountTradingTest(MockMvc mockMvc, CashLedger ledger, InstrumentCatalog catalog) {
+    AccountTradingTest(MockMvc mockMvc, AccountStore ledger, InstrumentCatalog catalog) {
         this.mockMvc = mockMvc;
         this.ledger = ledger;
         this.catalog = catalog;

@@ -3,11 +3,22 @@ package com.example.tradingengine.order.validation;
 import com.example.tradingengine.order.ChangeOrderPriceRequest;
 import com.example.tradingengine.order.CreateOrderRequest;
 import java.math.BigDecimal;
+import java.util.regex.Pattern;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ValidationUtils;
 import org.springframework.validation.Validator;
+import org.springframework.web.server.ResponseStatusException;
 
 public final class OrderValidation implements Validator {
+
+    private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
+
+    public static void validateIdempotencyKey(String key) {
+        if (key != null && !IDEMPOTENCY_KEY.matcher(key).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Некорректный Idempotency-Key");
+        }
+    }
 
     @Override
     public boolean supports(Class<?> type) {

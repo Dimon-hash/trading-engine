@@ -31,6 +31,12 @@ final class OrderReservations {
         byOrderId.put(order.id(), reserve);
     }
 
+    void restore(Instrument instrument, Order openOrder) {
+        AccountValidation.validateNewReserve(instrument, openOrder, byOrderId.containsKey(openOrder.id()));
+        AccountValidation.validateCurrency(assets.requireAccount(openOrder.accountId()), instrument);
+        byOrderId.put(openOrder.id(), new Reservation(instrument, openOrder));
+    }
+
     void changePrice(long orderId, BigDecimal newPrice) {
         Reservation reserve = require(orderId);
         Order order = reserve.order();

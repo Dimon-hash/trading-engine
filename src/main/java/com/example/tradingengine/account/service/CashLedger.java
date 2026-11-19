@@ -37,6 +37,10 @@ public class CashLedger {
         reservations.reserve(instrument, order);
     }
 
+    public synchronized void restoreReservation(Instrument instrument, Order order) {
+        reservations.restore(instrument, order);
+    }
+
     public synchronized void changePrice(long orderId, BigDecimal newPrice) {
         reservations.changePrice(orderId, newPrice);
     }

@@ -9,6 +9,7 @@ import com.example.tradingengine.model.Trade;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 public final class OrderBook {
 
@@ -18,8 +19,20 @@ public final class OrderBook {
     private final OrderBookSide buys = new OrderBookSide(Comparator.reverseOrder());
     private final OrderBookSide sells = new OrderBookSide(Comparator.naturalOrder());
 
+    private final LongSupplier nextTradeId;
+
     public OrderBook(String seccode) {
+        this(seccode, NEXT_TRADE_ID::getAndIncrement);
+    }
+
+    public OrderBook(String seccode, LongSupplier nextTradeId) {
         this.seccode = MatchingValidation.requireSeccode(seccode);
+        this.nextTradeId = nextTradeId;
+    }
+
+    public synchronized void restoreOpen(Order order) {
+        MatchingValidation.requireMatchingInstrument(seccode, order);
+        (order.side() == Side.BUY ? buys : sells).add(order);
     }
 
     public List<Trade> submit(Order incoming) {
@@ -42,7 +55,7 @@ public final class OrderBook {
             }
 
             long filled = Math.min(remaining, resting.quantity());
-            long tradeId = NEXT_TRADE_ID.getAndIncrement();
+            long tradeId = nextTradeId.getAsLong();
             Trade trade = new Trade(tradeId, seccode, resting.price(), filled);
             long buyOrderId = isBuy ? incoming.id() : resting.id();
             long sellOrderId = isBuy ? resting.id() : incoming.id();
